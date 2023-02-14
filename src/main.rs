@@ -1,5 +1,3 @@
-use std::os::windows::process;
-
 use mini_redis::{Connection, Frame};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -29,25 +27,28 @@ async fn process(socket: TcpStream) {
     //This will enable us to read/write redis frames
     let mut connection = Connection::new(socket);
 
-    while Some(frame) = connection.read_frame().await.unwrap() {
-        
-        let response = match Command::from_frame(frame).unwrap(){
+    while let Some(frame) = connection.read_frame().await.unwrap() {
+        let response = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
                 //Inserting key value pairs in the hashmap
+                // The value is stored as `Vec<u8>`
                 db.insert(cmd.key().to_string(), cmd.value().to_vec());
                 Frame::Simple("OK".to_string())
             }
             Get(cmd) => {
-                if let Some(value) = db.get(cmd.key()){
+                if let Some(value) = db.get(cmd.key()) {
+                    // `Frame::Bulk` expects data to be of type `Bytes`. This
+                    // type will be covered later in the tutorial. For now,
+                    // `&Vec<u8>` is converted to `Bytes` using `into()`.
                     Frame::Bulk(value.clone().into())
-                }
-                else{
+                } else {
                     Frame::Null
                 }
             }
-            cmd => panic!("unimplemented{:?}",cmd),
+            cmd => panic!("unimplemented {:?}", cmd),
         };
 
-        //responding to the client
+        //responsding to the client
         connection.write_frame(&response).await.unwrap();
+    }
 }
